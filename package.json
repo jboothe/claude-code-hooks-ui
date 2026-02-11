@@ -1,0 +1,14 @@
+{
+  "name": "claude-hooks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "tts-app": "bun run tts-app/server.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "openai": "^4.80.0",
+    "dotenv": "^16.4.7"
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/pre_tool_use.ts"
+          },
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/send_event.ts --source-app claude-hooks --event-type PreToolUse --summarize"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/post_tool_use.ts"
+          },
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/send_event.ts --source-app claude-hooks --event-type PostToolUse --summarize"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/notification.ts --notify"
+          },
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/send_event.ts --source-app claude-hooks --event-type Notification --summarize"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/stop.ts --chat --notify"
+          },
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/send_event.ts --source-app claude-hooks --event-type Stop --add-chat"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/subagent_stop.ts --notify"
+          },
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/send_event.ts --source-app claude-hooks --event-type SubagentStop"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/pre_compact.ts"
+          },
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/send_event.ts --source-app claude-hooks --event-type PreCompact"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/user_prompt_submit.ts --log-only --store-last-prompt --name-agent"
+          },
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/send_event.ts --source-app claude-hooks --event-type UserPromptSubmit --summarize"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/session_start.ts --add-context --announce"
+          },
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/send_event.ts --source-app claude-hooks --event-type SessionStart"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/session_end.ts"
+          },
+          {
+            "type": "command",
+            "command": "bun run .claude/hooks/send_event.ts --source-app claude-hooks --event-type SessionEnd"
+          }
+        ]
+      }
+    ]
+  }
+}
