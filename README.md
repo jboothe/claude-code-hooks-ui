@@ -13,6 +13,8 @@ A comprehensive hooks system for [Claude Code](https://docs.anthropic.com/en/doc
 - **Claude Code Hooks Manager app** — browser-based UI for testing and managing TTS providers (localhost:3455)
 - **Fully configurable** — all behavior controlled via `hooks.config.json` with sensible defaults
 
+![Claude Code Hooks Manager - Providers](tts-app/public/Claude-Code-Hooks-Mgr-01.png)
+
 ## Prerequisites
 
 - [Bun](https://bun.sh) (v1.0+)
@@ -161,6 +163,8 @@ Each event also fires `send_event.ts` to dispatch an observability event to a co
 - **2** — Block the tool call (PreToolUse only)
 
 Hooks are designed to **never crash** — all top-level errors are caught and exit with code 0 to avoid disrupting Claude Code.
+
+![Claude Code Hooks Manager - Settings](tts-app/public/Claude-Code-Hooks-Mgr-02.png)
 
 ## Claude Code Hooks Manager
 
