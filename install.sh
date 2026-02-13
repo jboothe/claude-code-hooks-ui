@@ -3,14 +3,16 @@ set -euo pipefail
 
 # claude-code-hooks installer
 # Usage:
-#   Fresh install (git clone):  ./install.sh
-#   From local path:            ./install.sh local:/path/to/hooks
-#   Update existing:            ./install.sh update
+#   ./install.sh <target-project-dir>                          # git clone
+#   ./install.sh <target-project-dir> local:/path/to/hooks     # copy from local
+#   ./install.sh <target-project-dir> update                   # git pull
+#
+# Examples:
+#   ./install.sh /Users/me/my-project
+#   ./install.sh /Users/me/my-project local:/Users/me/hooks-source/.claude/hooks
+#   ./install.sh . local:$(dirname "$0")
 
 HOOKS_REPO="https://github.com/jboothe/claude-code-hooks-ui.git"
-HOOKS_DIR=".claude/hooks"
-SETTINGS_FILE=".claude/settings.local.json"
-TEMPLATE_FILE="$HOOKS_DIR/settings.template.json"
 
 # Colors
 RED='\033[0;31m'
@@ -23,6 +25,48 @@ info()  { echo -e "${CYAN}[hooks]${NC} $*"; }
 ok()    { echo -e "${GREEN}[hooks]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[hooks]${NC} $*"; }
 err()   { echo -e "${RED}[hooks]${NC} $*" >&2; }
+
+# ─── Resolve target project ────────────────────────────────────────────────
+
+resolve_target() {
+  local target="${1:-}"
+
+  if [ -z "$target" ]; then
+    echo ""
+    err "Missing required argument: target project directory"
+    echo ""
+    echo "Usage:"
+    echo "  $0 <target-project-dir> [clone|update|local:/path/to/hooks]"
+    echo ""
+    echo "Examples:"
+    echo "  $0 /Users/me/my-project"
+    echo "  $0 /Users/me/my-project local:/path/to/hooks-source"
+    echo "  $0 .                                              # use current directory"
+    echo ""
+    exit 1
+  fi
+
+  # Resolve to absolute path
+  PROJECT_ROOT="$(cd "$target" 2>/dev/null && pwd)" || {
+    err "Target directory does not exist: $target"
+    exit 1
+  }
+
+  # Validate it looks like a project (has .claude/ or at least isn't inside a hooks dir)
+  if [[ "$PROJECT_ROOT" == */.claude/hooks* ]] || [[ "$PROJECT_ROOT" == */tts-app* ]]; then
+    err "Target looks like a hooks directory, not a project root: $PROJECT_ROOT"
+    err "Point this at the project root (the parent of .claude/)."
+    exit 1
+  fi
+
+  # Set all paths as absolute
+  HOOKS_DIR="$PROJECT_ROOT/.claude/hooks"
+  SETTINGS_FILE="$PROJECT_ROOT/.claude/settings.local.json"
+  TEMPLATE_FILE="$HOOKS_DIR/settings.template.json"
+
+  info "Target project: $PROJECT_ROOT"
+  info "Hooks destination: $HOOKS_DIR"
+}
 
 # ─── Prerequisites ───────────────────────────────────────────────────────────
 
@@ -69,8 +113,18 @@ install_hooks() {
 
     local:*)
       local src="${mode#local:}"
-      if [ ! -d "$src" ]; then
-        err "Source directory not found: $src"
+      # Resolve source to absolute path
+      src="$(cd "$src" 2>/dev/null && pwd)" || {
+        err "Source directory not found: ${mode#local:}"
+        exit 1
+      }
+      if [ ! -f "$src/package.json" ]; then
+        err "Source doesn't look like a hooks directory (no package.json): $src"
+        exit 1
+      fi
+      # Guard against installing into itself
+      if [ "$src" = "$HOOKS_DIR" ]; then
+        err "Source and destination are the same directory: $src"
         exit 1
       fi
       info "Copying hooks from $src..."
@@ -88,7 +142,7 @@ install_hooks() {
         exit 1
       fi
       info "Cloning hooks repo..."
-      mkdir -p .claude
+      mkdir -p "$PROJECT_ROOT/.claude"
       git clone "$HOOKS_REPO" "$HOOKS_DIR"
       ;;
   esac
@@ -112,7 +166,7 @@ merge_settings() {
     return
   fi
 
-  mkdir -p .claude
+  mkdir -p "$PROJECT_ROOT/.claude"
 
   if [ ! -f "$SETTINGS_FILE" ]; then
     # No existing settings — just copy the template
@@ -146,6 +200,103 @@ merge_settings() {
   fi
 }
 
+# ─── Verify installation ────────────────────────────────────────────────────
+
+verify_install() {
+  echo ""
+  info "Verifying installation..."
+  echo ""
+
+  local pass=0
+  local fail=0
+
+  check_item() {
+    local label="$1"
+    local path="$2"
+    local type="${3:-file}"  # file or dir
+
+    if [ "$type" = "dir" ]; then
+      if [ -d "$path" ]; then
+        echo -e "  ${GREEN}✔${NC}  $label"
+        ((pass++))
+      else
+        echo -e "  ${RED}✘${NC}  $label  ${RED}(missing: $path)${NC}"
+        ((fail++))
+      fi
+    else
+      if [ -f "$path" ]; then
+        echo -e "  ${GREEN}✔${NC}  $label"
+        ((pass++))
+      else
+        echo -e "  ${RED}✘${NC}  $label  ${RED}(missing: $path)${NC}"
+        ((fail++))
+      fi
+    fi
+  }
+
+  echo -e "  ${CYAN}── Core files ──${NC}"
+  check_item "package.json"            "$HOOKS_DIR/package.json"
+  check_item "tsconfig.json"           "$HOOKS_DIR/tsconfig.json"
+  check_item "settings.template.json"  "$HOOKS_DIR/settings.template.json"
+
+  echo -e "  ${CYAN}── Hook scripts ──${NC}"
+  check_item "stop.ts"                 "$HOOKS_DIR/stop.ts"
+  check_item "subagent_stop.ts"        "$HOOKS_DIR/subagent_stop.ts"
+  check_item "notification.ts"         "$HOOKS_DIR/notification.ts"
+  check_item "session_end.ts"          "$HOOKS_DIR/session_end.ts"
+  check_item "session_start.ts"        "$HOOKS_DIR/session_start.ts"
+  check_item "pre_tool_use.ts"         "$HOOKS_DIR/pre_tool_use.ts"
+  check_item "post_tool_use.ts"        "$HOOKS_DIR/post_tool_use.ts"
+  check_item "user_prompt_submit.ts"   "$HOOKS_DIR/user_prompt_submit.ts"
+  check_item "pre_compact.ts"          "$HOOKS_DIR/pre_compact.ts"
+  check_item "send_event.ts"           "$HOOKS_DIR/send_event.ts"
+
+  echo -e "  ${CYAN}── Libraries ──${NC}"
+  check_item "lib/config.ts"           "$HOOKS_DIR/lib/config.ts"
+  check_item "lib/tts/"                "$HOOKS_DIR/lib/tts"               "dir"
+  check_item "lib/llm/"                "$HOOKS_DIR/lib/llm"               "dir"
+  check_item "lib/templates/"          "$HOOKS_DIR/lib/templates"         "dir"
+
+  echo -e "  ${CYAN}── TTS Manager App ──${NC}"
+  check_item "tts-app/server.ts"       "$HOOKS_DIR/tts-app/server.ts"
+  check_item "tts-app/public/index.html" "$HOOKS_DIR/tts-app/public/index.html"
+
+  echo -e "  ${CYAN}── Dependencies ──${NC}"
+  check_item "node_modules/"           "$HOOKS_DIR/node_modules"          "dir"
+
+  echo -e "  ${CYAN}── Settings integration ──${NC}"
+  check_item "settings.local.json"     "$SETTINGS_FILE"
+
+  # Check that settings.local.json actually has a "hooks" key
+  if [ -f "$SETTINGS_FILE" ]; then
+    if command -v jq &>/dev/null; then
+      if jq -e '.hooks' "$SETTINGS_FILE" &>/dev/null; then
+        echo -e "  ${GREEN}✔${NC}  settings.local.json contains \"hooks\" key"
+        ((pass++))
+      else
+        echo -e "  ${RED}✘${NC}  settings.local.json missing \"hooks\" key"
+        ((fail++))
+      fi
+    else
+      if grep -q '"hooks"' "$SETTINGS_FILE" 2>/dev/null; then
+        echo -e "  ${GREEN}✔${NC}  settings.local.json contains \"hooks\" key"
+        ((pass++))
+      else
+        echo -e "  ${RED}✘${NC}  settings.local.json missing \"hooks\" key"
+        ((fail++))
+      fi
+    fi
+  fi
+
+  echo ""
+  if [ "$fail" -eq 0 ]; then
+    ok "Verification passed: $pass/$pass checks OK"
+  else
+    err "Verification: $pass passed, $fail failed"
+    warn "Review the failures above and re-run the installer if needed."
+  fi
+}
+
 # ─── Remind about .env ──────────────────────────────────────────────────────
 
 remind_env() {
@@ -164,16 +315,21 @@ remind_env() {
 main() {
   echo ""
   echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
-  echo -e "${CYAN}║   claude-code-hooks installer v1.0   ║${NC}"
+  echo -e "${CYAN}║   claude-code-hooks installer v1.1   ║${NC}"
   echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
   echo ""
 
+  # First arg is always the target project directory
+  resolve_target "${1:-}"
+
   check_prerequisites
 
-  local mode="${1:-clone}"
+  # Second arg is the install mode (default: clone)
+  local mode="${2:-clone}"
   install_hooks "$mode"
   install_deps
   merge_settings
+  verify_install
   remind_env
 
   echo ""
