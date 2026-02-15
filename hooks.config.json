@@ -8,7 +8,7 @@
       "native"
     ],
     "enabled": true,
-    "nameIncludeProbability": 1,
+    "nameIncludeProbability": 0.25,
     "hookToggles": {
       "stop": true,
       "subagentStop": true,
@@ -35,7 +35,7 @@
       "voice": "Chloe",
       "temperature": 0.25
     },
-    "templateTone": "concise"
+    "templateTone": "playful"
   },
   "templates": {
     "notification": {
@@ -63,7 +63,7 @@
   "guardrails": {
     "enabled": true,
     "sleep": {
-      "enabled": true,
+      "enabled": false,
       "maxSeconds": 120
     },
     "subagentRepeat": {

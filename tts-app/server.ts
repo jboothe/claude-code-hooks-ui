@@ -352,6 +352,16 @@ const server = Bun.serve({
       });
     }
 
+    // Serve favicon (browsers request /favicon.ico automatically)
+    if (path === '/favicon.ico' || path === '/favicon.png') {
+      const faviconPath = join(PUBLIC_DIR, 'images', 'favicon.png');
+      if (existsSync(faviconPath)) {
+        return new Response(readFileSync(faviconPath), {
+          headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' },
+        });
+      }
+    }
+
     // API routes
     if (path.startsWith('/api/')) {
       return handleAPI(req, path);
