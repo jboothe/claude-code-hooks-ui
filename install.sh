@@ -3,14 +3,13 @@ set -euo pipefail
 
 # claude-code-hooks installer
 # Usage:
-#   ./install.sh <target-project-dir>                          # git clone
-#   ./install.sh <target-project-dir> local:/path/to/hooks     # copy from local
-#   ./install.sh <target-project-dir> update                   # git pull
+#   ./install.sh <target-project-dir> [clone|update|local:/path] [--port <number>]
 #
 # Examples:
 #   ./install.sh /Users/me/my-project
 #   ./install.sh /Users/me/my-project local:/Users/me/hooks-source/.claude/hooks
 #   ./install.sh . local:$(dirname "$0")
+#   ./install.sh /Users/me/my-project local:... --port 4000
 
 HOOKS_REPO="https://github.com/jboothe/claude-code-hooks-ui.git"
 
@@ -218,18 +217,18 @@ verify_install() {
     if [ "$type" = "dir" ]; then
       if [ -d "$path" ]; then
         echo -e "  ${GREEN}✔${NC}  $label"
-        ((pass++))
+        ((++pass))
       else
         echo -e "  ${RED}✘${NC}  $label  ${RED}(missing: $path)${NC}"
-        ((fail++))
+        ((++fail))
       fi
     else
       if [ -f "$path" ]; then
         echo -e "  ${GREEN}✔${NC}  $label"
-        ((pass++))
+        ((++pass))
       else
         echo -e "  ${RED}✘${NC}  $label  ${RED}(missing: $path)${NC}"
-        ((fail++))
+        ((++fail))
       fi
     fi
   }
@@ -272,18 +271,18 @@ verify_install() {
     if command -v jq &>/dev/null; then
       if jq -e '.hooks' "$SETTINGS_FILE" &>/dev/null; then
         echo -e "  ${GREEN}✔${NC}  settings.local.json contains \"hooks\" key"
-        ((pass++))
+        ((++pass))
       else
         echo -e "  ${RED}✘${NC}  settings.local.json missing \"hooks\" key"
-        ((fail++))
+        ((++fail))
       fi
     else
       if grep -q '"hooks"' "$SETTINGS_FILE" 2>/dev/null; then
         echo -e "  ${GREEN}✔${NC}  settings.local.json contains \"hooks\" key"
-        ((pass++))
+        ((++pass))
       else
         echo -e "  ${RED}✘${NC}  settings.local.json missing \"hooks\" key"
-        ((fail++))
+        ((++fail))
       fi
     fi
   fi
@@ -310,9 +309,73 @@ remind_env() {
   warn "The installer does NOT create or modify .env files — secrets stay project-specific."
 }
 
+# ─── Port flag parsing ────────────────────────────────────────────────────────
+
+CONFIGURED_PORT=3455
+
+parse_flags() {
+  local new_args=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --port)
+        if [ -z "${2:-}" ] || ! [[ "$2" =~ ^[0-9]+$ ]]; then
+          err "--port requires a numeric argument"
+          exit 1
+        fi
+        if [ "$2" -lt 1024 ] || [ "$2" -gt 65535 ]; then
+          err "Port must be between 1024 and 65535"
+          exit 1
+        fi
+        CONFIGURED_PORT="$2"
+        shift 2
+        ;;
+      *)
+        new_args+=("$1")
+        shift
+        ;;
+    esac
+  done
+  REMAINING_ARGS=("${new_args[@]}")
+}
+
+# ─── Configure port ──────────────────────────────────────────────────────────
+
+configure_port() {
+  # Only write if a non-default port was explicitly requested
+  if [ "$CONFIGURED_PORT" -eq 3455 ]; then
+    return
+  fi
+
+  local config_file="$HOOKS_DIR/hooks.config.json"
+  info "Setting server port to $CONFIGURED_PORT..."
+
+  if command -v jq &>/dev/null; then
+    if [ -f "$config_file" ]; then
+      local merged
+      merged=$(jq --argjson port "$CONFIGURED_PORT" '.server.port = $port' "$config_file")
+      echo "$merged" > "$config_file"
+    else
+      echo "{\"server\":{\"port\":$CONFIGURED_PORT}}" | jq '.' > "$config_file"
+    fi
+  else
+    if [ -f "$config_file" ]; then
+      warn "jq not available — cannot merge port into existing config."
+      warn "Manually add '\"server\": { \"port\": $CONFIGURED_PORT }' to $config_file"
+    else
+      echo "{\"server\":{\"port\":$CONFIGURED_PORT}}" > "$config_file"
+    fi
+  fi
+
+  ok "Server port configured: $CONFIGURED_PORT"
+}
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 main() {
+  # Parse --port flag before processing positional args
+  parse_flags "$@"
+  set -- "${REMAINING_ARGS[@]}"
+
   echo ""
   echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
   echo -e "${CYAN}║   claude-code-hooks installer v1.1   ║${NC}"
@@ -328,6 +391,7 @@ main() {
   local mode="${2:-clone}"
   install_hooks "$mode"
   install_deps
+  configure_port
   merge_settings
   verify_install
   remind_env
@@ -335,7 +399,7 @@ main() {
   echo ""
   ok "Installation complete!"
   info "Start a new Claude Code session to activate hooks."
-  info "Run 'bun run tts-app' from $HOOKS_DIR to start the Claude Code Hooks Manager (localhost:3455)."
+  info "Run 'bun run tts-app' from $HOOKS_DIR to start the Hooks Manager (localhost:$CONFIGURED_PORT)."
   echo ""
 }
 

@@ -14,8 +14,10 @@ import { getAllProviders, resolveTTSProvider } from '../lib/tts/resolver';
 import { loadTemplates, resetTemplateCache } from '../lib/templates/loader';
 import { DEFAULT_TEMPLATES, TONE_TEMPLATES } from '../lib/templates/defaults';
 import { normalizeTTSText } from '../lib/tts/normalizer';
+import { logTTSActivity, ACTIVITY_LOG_PATH } from '../lib/activity-log';
+import type { TTSActivityEntry } from '../lib/types';
 
-const PORT = 3455;
+const PORT = parseInt(process.env.PORT || '', 10) || loadConfig().server?.port || 3455;
 const PUBLIC_DIR = join(import.meta.dir, 'public');
 const CONFIG_PATH = join(import.meta.dir, '..', 'hooks.config.json');
 
@@ -241,6 +243,18 @@ async function handleAPI(req: Request, path: string): Promise<Response> {
       await provider.speak(normalizeTTSText(text));
       const duration = Date.now() - start;
 
+      // Log test TTS to activity log
+      logTTSActivity({
+        hookType: 'test',
+        sessionId: 'test-harness',
+        agentName: null,
+        agentType: null,
+        message: text,
+        provider: provider.name,
+        durationMs: duration,
+        success: true,
+      });
+
       return jsonResponse({ ok: true, provider: provider.name, duration });
     } catch (err) {
       return jsonResponse({ ok: false, error: String(err) }, 500);
@@ -304,6 +318,65 @@ async function handleAPI(req: Request, path: string): Promise<Response> {
   // GET /api/defaults — raw defaults object
   if (path === '/api/defaults' && req.method === 'GET') {
     return jsonResponse({ config: DEFAULTS, templates: DEFAULT_TEMPLATES, availableTones: Object.keys(TONE_TEMPLATES) });
+  }
+
+  // GET /api/server-info — current running port
+  if (path === '/api/server-info' && req.method === 'GET') {
+    return jsonResponse({ port: PORT });
+  }
+
+  // GET /api/activity-log — read activity log with optional filters
+  if (path === '/api/activity-log' && req.method === 'GET') {
+    try {
+      const url = new URL(req.url);
+      const hookTypeFilter = url.searchParams.get('hookType');
+      const sessionFilter = url.searchParams.get('sessionId');
+      const limit = parseInt(url.searchParams.get('limit') ?? '200') || 200;
+      const offset = parseInt(url.searchParams.get('offset') ?? '0') || 0;
+
+      let entries: TTSActivityEntry[] = [];
+      if (existsSync(ACTIVITY_LOG_PATH)) {
+        try {
+          const raw = readFileSync(ACTIVITY_LOG_PATH, 'utf-8');
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) entries = parsed;
+        } catch { /* corrupt file — return empty */ }
+      }
+
+      // Build sessions map (before filtering)
+      const sessions: Record<string, number> = {};
+      for (const e of entries) {
+        sessions[e.sessionId] = (sessions[e.sessionId] ?? 0) + 1;
+      }
+
+      // Apply filters
+      if (hookTypeFilter) {
+        const types = hookTypeFilter.split(',');
+        entries = entries.filter(e => types.includes(e.hookType));
+      }
+      if (sessionFilter) {
+        entries = entries.filter(e => e.sessionId === sessionFilter);
+      }
+
+      const total = entries.length;
+
+      // Reverse chronological, then paginate
+      entries = entries.reverse().slice(offset, offset + limit);
+
+      return jsonResponse({ entries, total, sessions });
+    } catch (err) {
+      return jsonResponse({ error: String(err) }, 500);
+    }
+  }
+
+  // POST /api/activity-log/clear — clear the activity log
+  if (path === '/api/activity-log/clear' && req.method === 'POST') {
+    try {
+      writeFileSync(ACTIVITY_LOG_PATH, '[]', 'utf-8');
+      return jsonResponse({ ok: true });
+    } catch (err) {
+      return jsonResponse({ ok: false, error: String(err) }, 500);
+    }
   }
 
   return jsonResponse({ error: 'Not found' }, 404);

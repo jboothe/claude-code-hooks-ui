@@ -52,6 +52,9 @@ export interface HooksConfig {
       maxLaunches: number;
     };
   };
+  server: {
+    port: number;
+  };
 }
 
 /** Default config values */
@@ -107,6 +110,7 @@ export const DEFAULTS: HooksConfig = {
       maxLaunches: 3,
     },
   },
+  server: { port: 3455 },
 };
 
 let cachedConfig: HooksConfig | null = null;

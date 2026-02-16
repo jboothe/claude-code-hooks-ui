@@ -12,6 +12,9 @@ let templates = {};
 let envStatus = {};
 let availableTones = [];
 let activeTemplateHook = 'stop';
+let activityLogData = { entries: [], total: 0, sessions: {} };
+let activityPollInterval = null;
+let runningPort = null;
 
 // ── Constants ─────────────────────────────────────────────────────────
 const CHEVRON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
@@ -98,12 +101,13 @@ const api = {
 // ── Init ──────────────────────────────────────────────────────────────
 async function init() {
   try {
-    const [configData, providerData, templateData, envData, defaultData] = await Promise.all([
+    const [configData, providerData, templateData, envData, defaultData, serverInfo] = await Promise.all([
       api.get('/api/config'),
       api.get('/api/providers'),
       api.get('/api/templates'),
       api.get('/api/env-status'),
       api.get('/api/defaults'),
+      api.get('/api/server-info'),
     ]);
 
     config = configData;
@@ -113,12 +117,14 @@ async function init() {
     defaults = defaultData.config;
     defaultTemplates = defaultData.templates;
     availableTones = defaultData.availableTones || ['default', 'professional', 'concise', 'playful'];
+    runningPort = serverInfo.port;
 
     renderProviders();
     renderTemplates();
     renderTestHarness();
     renderSettings();
     renderSecurity();
+    initActivityLog();
 
     setStatus('Connected', 'ok');
   } catch (err) {
@@ -703,6 +709,10 @@ document.getElementById('quick-tests').addEventListener('click', (e) => {
 function renderSettings() {
   const c = config;
 
+  // Server port
+  setValue('server-port', c.server?.port ?? 3455);
+  document.getElementById('server-port-notice').style.display = 'none';
+
   // Name include probability
   const nameProbSlider = document.getElementById('nameIncludeProbability');
   nameProbSlider.value = c.tts?.nameIncludeProbability ?? 0.3;
@@ -749,7 +759,9 @@ function renderSettings() {
 }
 
 document.getElementById('btn-save-settings').addEventListener('click', async () => {
+  const newPort = parseInt(document.getElementById('server-port').value) || 3455;
   const updates = {
+    server: { port: newPort },
     tts: {
       enabled: isChecked('tts-enabled'),
       nameIncludeProbability: parseFloat(document.getElementById('nameIncludeProbability').value),
@@ -836,6 +848,12 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
   if (result.ok) {
     config = result.config;
     setStatus('Settings saved', 'ok');
+    // Show restart notice if port changed from the running port
+    if (runningPort && newPort !== runningPort) {
+      document.getElementById('server-port-notice').style.display = 'block';
+    } else {
+      document.getElementById('server-port-notice').style.display = 'none';
+    }
   } else {
     setStatus(`Save failed: ${result.error}`, 'error');
   }
@@ -898,6 +916,206 @@ function setStatus(msg, className) {
   const el = document.getElementById('status');
   el.textContent = msg;
   el.className = `status ${className || ''}`;
+}
+
+// ── Panel 6: Activity Log ─────────────────────────────────────────────
+
+const HOOK_TYPE_COLORS = {
+  stop: '#2ecc71',
+  subagentStop: '#3498db',
+  notification: '#f39c12',
+  sessionEnd: '#e74c3c',
+  test: '#9b59b6',
+};
+
+const HOOK_TYPE_LABELS = {
+  stop: 'Stop',
+  subagentStop: 'Subagent',
+  notification: 'Notify',
+  sessionEnd: 'Session End',
+  test: 'Test',
+};
+
+function initActivityLog() {
+  fetchActivityLog();
+  startActivityPoll();
+
+  document.getElementById('activity-refresh-btn').addEventListener('click', fetchActivityLog);
+
+  document.getElementById('activity-clear-btn').addEventListener('click', async () => {
+    if (!confirm('Clear all activity log entries?')) return;
+    await api.post('/api/activity-log/clear', {});
+    fetchActivityLog();
+    setStatus('Activity log cleared', 'ok');
+  });
+
+  document.getElementById('activity-filter-hook').addEventListener('change', fetchActivityLog);
+  document.getElementById('activity-filter-session').addEventListener('change', fetchActivityLog);
+
+  document.getElementById('activity-auto-refresh').addEventListener('change', (e) => {
+    if (e.target.checked) {
+      startActivityPoll();
+    } else {
+      stopActivityPoll();
+    }
+  });
+}
+
+function startActivityPoll() {
+  stopActivityPoll();
+  activityPollInterval = setInterval(fetchActivityLog, 5000);
+}
+
+function stopActivityPoll() {
+  if (activityPollInterval) {
+    clearInterval(activityPollInterval);
+    activityPollInterval = null;
+  }
+}
+
+async function fetchActivityLog() {
+  try {
+    const params = new URLSearchParams();
+    const hookFilter = document.getElementById('activity-filter-hook').value;
+    const sessionFilter = document.getElementById('activity-filter-session').value;
+    if (hookFilter) params.set('hookType', hookFilter);
+    if (sessionFilter) params.set('sessionId', sessionFilter);
+
+    activityLogData = await api.get(`/api/activity-log?${params.toString()}`);
+    updateActivitySessionFilter();
+    renderActivityLog();
+    updateActivityBadge();
+  } catch (err) {
+    console.error('Activity log fetch error:', err);
+  }
+}
+
+function updateActivitySessionFilter() {
+  const select = document.getElementById('activity-filter-session');
+  const current = select.value;
+  const sessions = activityLogData.sessions || {};
+
+  // Keep first option
+  while (select.options.length > 1) select.remove(1);
+
+  for (const [sid, count] of Object.entries(sessions)) {
+    const opt = document.createElement('option');
+    opt.value = sid;
+    const label = sid === 'test-harness' ? 'Test Harness' : sid.slice(0, 12) + '...';
+    opt.textContent = `${label} (${count})`;
+    select.appendChild(opt);
+  }
+
+  // Restore selection if still valid
+  if (current && sessions[current]) {
+    select.value = current;
+  }
+}
+
+function updateActivityBadge() {
+  const badge = document.getElementById('activity-badge');
+  const total = activityLogData.total || 0;
+  if (total > 0) {
+    badge.textContent = total > 999 ? '999+' : total;
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function renderActivityLog() {
+  const container = document.getElementById('activity-log-container');
+  const entries = activityLogData.entries || [];
+
+  if (!entries.length) {
+    container.innerHTML = '<p class="panel-desc" style="text-align:center; padding:2rem;">No activity log entries yet. Use the Test Harness or run Claude Code with hooks to generate entries.</p>';
+    return;
+  }
+
+  // Group by session
+  const sessionGroups = new Map();
+  for (const entry of entries) {
+    if (!sessionGroups.has(entry.sessionId)) {
+      sessionGroups.set(entry.sessionId, []);
+    }
+    sessionGroups.get(entry.sessionId).push(entry);
+  }
+
+  let html = '';
+  for (const [sessionId, sessionEntries] of sessionGroups) {
+    const sessionLabel = sessionId === 'test-harness' ? 'Test Harness' : sessionId.slice(0, 16) + '...';
+    const latestTime = sessionEntries[0]?.timestamp;
+    const relTime = timeAgo(latestTime);
+
+    // Sub-group by agent within session
+    const agentGroups = new Map();
+    for (const entry of sessionEntries) {
+      const agentKey = entry.agentName || 'Main Agent';
+      if (!agentGroups.has(agentKey)) {
+        agentGroups.set(agentKey, []);
+      }
+      agentGroups.get(agentKey).push(entry);
+    }
+
+    html += `
+      <div class="activity-session-group">
+        <div class="activity-session-header" onclick="this.parentElement.classList.toggle('collapsed')">
+          <span class="activity-chevron">${CHEVRON_SVG}</span>
+          <span class="activity-session-id">${escapeHtml(sessionLabel)}</span>
+          <span class="activity-session-count">${sessionEntries.length} ${sessionEntries.length === 1 ? 'entry' : 'entries'}</span>
+          <span class="activity-session-time">${escapeHtml(relTime)}</span>
+        </div>
+        <div class="activity-session-body">
+    `;
+
+    for (const [agentKey, agentEntries] of agentGroups) {
+      html += `
+        <div class="activity-agent-group">
+          <div class="activity-agent-header">${escapeHtml(agentKey)} <span class="activity-agent-count">(${agentEntries.length})</span></div>
+      `;
+
+      for (const entry of agentEntries) {
+        const color = HOOK_TYPE_COLORS[entry.hookType] || '#888';
+        const label = HOOK_TYPE_LABELS[entry.hookType] || entry.hookType;
+        const time = new Date(entry.timestamp).toLocaleTimeString();
+        const duration = entry.durationMs ? `${(entry.durationMs / 1000).toFixed(1)}s` : '';
+        const statusIcon = entry.success ? '' : ' <span style="color:var(--error);">[FAILED]</span>';
+
+        html += `
+          <div class="activity-entry ${entry.success ? '' : 'activity-entry-error'}">
+            <div class="activity-entry-meta">
+              <span class="activity-hook-badge" style="background:${color}">${escapeHtml(label)}</span>
+              <span class="activity-time">${escapeHtml(time)}</span>
+              <span class="activity-provider">${escapeHtml(entry.provider)}</span>
+              ${duration ? `<span class="activity-duration">${escapeHtml(duration)}</span>` : ''}
+              ${statusIcon}
+            </div>
+            <div class="activity-message">${escapeHtml(entry.message)}</div>
+            ${entry.error ? `<div class="activity-error">${escapeHtml(entry.error)}</div>` : ''}
+          </div>
+        `;
+      }
+
+      html += '</div>'; // agent-group
+    }
+
+    html += '</div></div>'; // session-body, session-group
+  }
+
+  container.innerHTML = html;
+}
+
+function timeAgo(isoString) {
+  if (!isoString) return '';
+  const diff = Date.now() - new Date(isoString).getTime();
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────
