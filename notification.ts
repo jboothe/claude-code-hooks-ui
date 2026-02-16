@@ -10,6 +10,7 @@ import { loadConfig } from './lib/config';
 import { resolveTTSProvider } from './lib/tts/resolver';
 import { speakWithLock } from './lib/queue/tts-queue';
 import { loadTemplates, renderTemplate } from './lib/templates/loader';
+import { logTTSActivity } from './lib/activity-log';
 import type { NotificationHookInput } from './lib/types';
 import { join } from 'path';
 
@@ -32,14 +33,14 @@ async function main(): Promise<void> {
       console.error('Skipping TTS for generic "waiting for input" message');
     } else {
       console.error('Notification hook: --notify flag detected, calling TTS');
-      await announceNotification();
+      await announceNotification(sessionId);
     }
   } else {
     console.error('Notification hook: --notify flag NOT set, skipping TTS');
   }
 }
 
-async function announceNotification(): Promise<void> {
+async function announceNotification(sessionId: string): Promise<void> {
   try {
     const config = loadConfig();
     if (!config.tts.enabled || !config.tts.hookToggles.notification) {
@@ -67,8 +68,29 @@ async function announceNotification(): Promise<void> {
     });
 
     console.error(`TTS: Speaking: '${ttsMessage}'`);
-    await speakWithLock(provider, ttsMessage);
-    console.error('TTS completed successfully');
+    const ttsStart = Date.now();
+    let ttsSuccess = true;
+    let ttsError: string | undefined;
+    try {
+      await speakWithLock(provider, ttsMessage);
+      console.error('TTS completed successfully');
+    } catch (speakErr) {
+      ttsSuccess = false;
+      ttsError = String(speakErr);
+      console.error(`TTS error: ${speakErr}`);
+    } finally {
+      logTTSActivity({
+        hookType: 'notification',
+        sessionId,
+        agentName: null,
+        agentType: null,
+        message: ttsMessage,
+        provider: provider.name,
+        durationMs: Date.now() - ttsStart,
+        success: ttsSuccess,
+        error: ttsError,
+      });
+    }
   } catch (err) {
     console.error(`TTS error: ${err}`);
   }

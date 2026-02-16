@@ -14,6 +14,7 @@ import { speakWithLock } from './lib/queue/tts-queue';
 import { loadTemplates, pickAndRender } from './lib/templates/loader';
 import { AnthropicLLM } from './lib/llm/anthropic';
 import { OpenAILLM } from './lib/llm/openai';
+import { logTTSActivity } from './lib/activity-log';
 import type { StopHookInput } from './lib/types';
 import { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
@@ -41,7 +42,7 @@ async function main(): Promise<void> {
 
   if (flags.notify) {
     console.error(`Stop hook: --notify flag detected (stop_hook_active=${stopHookActive}), calling TTS`);
-    await announceCompletion(input.transcript_path);
+    await announceCompletion(input.transcript_path, sessionId);
   } else {
     console.error('Stop hook: --notify flag NOT set, skipping TTS');
   }
@@ -61,7 +62,7 @@ function exportChat(transcriptPath: string, logDir: string): void {
   } catch { /* fail silently */ }
 }
 
-async function announceCompletion(transcriptPath?: string): Promise<void> {
+async function announceCompletion(transcriptPath?: string, sessionId?: string): Promise<void> {
   try {
     const config = loadConfig();
     if (!config.tts.enabled || !config.tts.hookToggles.stop) {
@@ -92,8 +93,29 @@ async function announceCompletion(transcriptPath?: string): Promise<void> {
     }
 
     appendToDebugLog(DEBUG_LOG, `TTS: Speaking: '${completionMessage}'`);
-    await speakWithLock(provider, completionMessage);
-    appendToDebugLog(DEBUG_LOG, 'TTS completed successfully');
+    const ttsStart = Date.now();
+    let ttsSuccess = true;
+    let ttsError: string | undefined;
+    try {
+      await speakWithLock(provider, completionMessage);
+      appendToDebugLog(DEBUG_LOG, 'TTS completed successfully');
+    } catch (speakErr) {
+      ttsSuccess = false;
+      ttsError = String(speakErr);
+      appendToDebugLog(DEBUG_LOG, `TTS error: ${speakErr}`);
+    } finally {
+      logTTSActivity({
+        hookType: 'stop',
+        sessionId: sessionId || 'unknown',
+        agentName: null,
+        agentType: null,
+        message: completionMessage,
+        provider: provider.name,
+        durationMs: Date.now() - ttsStart,
+        success: ttsSuccess,
+        error: ttsError,
+      });
+    }
   } catch (err) {
     appendToDebugLog(DEBUG_LOG, `TTS error: ${err}`);
   }

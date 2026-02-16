@@ -10,6 +10,7 @@ import { loadConfig } from './lib/config';
 import { resolveTTSProvider } from './lib/tts/resolver';
 import { speakWithLock } from './lib/queue/tts-queue';
 import { loadTemplates, renderTemplate } from './lib/templates/loader';
+import { logTTSActivity } from './lib/activity-log';
 import type { SessionEndHookInput } from './lib/types';
 import { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
@@ -50,7 +51,27 @@ async function main(): Promise<void> {
           projectName: getProjectName(),
           userName: (process.env.USER_NAME ?? '').trim(),
         });
-        await speakWithLock(provider, message);
+        const ttsStart = Date.now();
+        let ttsSuccess = true;
+        let ttsError: string | undefined;
+        try {
+          await speakWithLock(provider, message);
+        } catch (speakErr) {
+          ttsSuccess = false;
+          ttsError = String(speakErr);
+        } finally {
+          logTTSActivity({
+            hookType: 'sessionEnd',
+            sessionId,
+            agentName: null,
+            agentType: null,
+            message,
+            provider: provider.name,
+            durationMs: Date.now() - ttsStart,
+            success: ttsSuccess,
+            error: ttsError,
+          });
+        }
       }
     } catch { /* TTS failure is non-fatal */ }
   }

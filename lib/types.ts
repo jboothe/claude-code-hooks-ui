@@ -101,6 +101,21 @@ export interface GitState {
   modifiedFiles: string[];
 }
 
+/** TTS activity log entry */
+export interface TTSActivityEntry {
+  id: string;                // Unique: `${timestamp}-${hookType}-${random4hex}`
+  timestamp: string;         // ISO 8601
+  hookType: 'stop' | 'subagentStop' | 'notification' | 'sessionEnd' | 'test';
+  sessionId: string;         // From hook input, or "test-harness" for test panel
+  agentName: string | null;  // Friendly name ("Explorer", "Planner") — subagentStop only
+  agentType: string | null;  // Raw type ("Explore", "Plan") — subagentStop only
+  message: string;           // The actual TTS text spoken
+  provider: string;          // Provider name ("unreal-speech", "native", etc.)
+  durationMs: number;        // Speak duration in ms
+  success: boolean;          // Whether speak succeeded
+  error?: string;            // Error message if failed
+}
+
 /** Event data sent to the observability server */
 export interface ObservabilityEvent {
   source_app: string;

@@ -12,6 +12,7 @@ import { loadConfig } from './lib/config';
 import { resolveTTSProvider } from './lib/tts/resolver';
 import { speakWithLock } from './lib/queue/tts-queue';
 import { loadTemplates, pickAndRender } from './lib/templates/loader';
+import { logTTSActivity } from './lib/activity-log';
 import type { SubagentStopHookInput } from './lib/types';
 import { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
@@ -54,7 +55,7 @@ async function main(): Promise<void> {
 
   if (flags.notify) {
     console.error('SubagentStop hook: --notify flag detected, calling TTS');
-    await announceSubagentCompletion(input.transcript_path);
+    await announceSubagentCompletion(input.transcript_path, sessionId);
   } else {
     console.error('SubagentStop hook: --notify flag NOT set, skipping TTS');
   }
@@ -75,7 +76,7 @@ function exportChat(transcriptPath: string, logDir: string): void {
   } catch { /* fail silently */ }
 }
 
-async function announceSubagentCompletion(transcriptPath?: string): Promise<void> {
+async function announceSubagentCompletion(transcriptPath?: string, sessionId?: string): Promise<void> {
   const debugLog = 'logs/tts_debug.log';
 
   try {
@@ -134,8 +135,29 @@ async function announceSubagentCompletion(transcriptPath?: string): Promise<void
     }
 
     appendToDebugLog(debugLog, `SubagentStop TTS: '${ttsMessage}'`);
-    await speakWithLock(provider, ttsMessage);
-    appendToDebugLog(debugLog, 'SubagentStop TTS completed successfully');
+    const ttsStart = Date.now();
+    let ttsSuccess = true;
+    let ttsError: string | undefined;
+    try {
+      await speakWithLock(provider, ttsMessage);
+      appendToDebugLog(debugLog, 'SubagentStop TTS completed successfully');
+    } catch (speakErr) {
+      ttsSuccess = false;
+      ttsError = String(speakErr);
+      appendToDebugLog(debugLog, `SubagentStop TTS error: ${speakErr}`);
+    } finally {
+      logTTSActivity({
+        hookType: 'subagentStop',
+        sessionId: sessionId || 'unknown',
+        agentName: friendlyName,
+        agentType: subagentType,
+        message: ttsMessage,
+        provider: provider.name,
+        durationMs: Date.now() - ttsStart,
+        success: ttsSuccess,
+        error: ttsError,
+      });
+    }
   } catch (err) {
     appendToDebugLog(debugLog, `SubagentStop TTS error: ${err}`);
   }
