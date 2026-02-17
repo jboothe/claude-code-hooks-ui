@@ -25,6 +25,44 @@ ok()    { echo -e "${GREEN}[hooks]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[hooks]${NC} $*"; }
 err()   { echo -e "${RED}[hooks]${NC} $*" >&2; }
 
+# ─── OS detection ─────────────────────────────────────────────────────────────
+
+PLATFORM="unknown"
+
+detect_os() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)  PLATFORM="windows" ;;
+    Darwin*)               PLATFORM="macos"   ;;
+    Linux*)                PLATFORM="linux"   ;;
+    *)                     PLATFORM="unknown" ;;
+  esac
+}
+
+# ─── Path normalisation ──────────────────────────────────────────────────────
+# On Windows (Git Bash / MSYS2 / Cygwin) users frequently paste paths with
+# backslashes (e.g.  C:\Users\me\project).  Bash treats backslashes as escape
+# characters, so we convert them to forward slashes.  We also translate
+# Windows drive letters  C:/...  →  /c/...  which is the native Git Bash form.
+
+normalize_path() {
+  local p="$1"
+
+  if [ "$PLATFORM" = "windows" ]; then
+    # 1. Replace every backslash with a forward slash
+    p="${p//\\//}"
+
+    # 2. Convert drive letter  C:/  →  /c/  (case-insensitive)
+    if [[ "$p" =~ ^([A-Za-z]):/(.*) ]]; then
+      local drive="${BASH_REMATCH[1]}"
+      local rest="${BASH_REMATCH[2]}"
+      # Lowercase the drive letter for Git Bash convention
+      p="/${drive,,}/${rest}"
+    fi
+  fi
+
+  echo "$p"
+}
+
 # ─── Resolve target project ────────────────────────────────────────────────
 
 resolve_target() {
@@ -44,6 +82,9 @@ resolve_target() {
     echo ""
     exit 1
   fi
+
+  # Normalise Windows-style paths (backslashes → forward slashes, drive letters)
+  target="$(normalize_path "$target")"
 
   # Resolve to absolute path
   PROJECT_ROOT="$(cd "$target" 2>/dev/null && pwd)" || {
@@ -112,6 +153,8 @@ install_hooks() {
 
     local:*)
       local src="${mode#local:}"
+      # Normalise Windows-style paths
+      src="$(normalize_path "$src")"
       # Resolve source to absolute path
       src="$(cd "$src" 2>/dev/null && pwd)" || {
         err "Source directory not found: ${mode#local:}"
@@ -129,10 +172,21 @@ install_hooks() {
       info "Copying hooks from $src..."
       mkdir -p "$HOOKS_DIR"
       # Copy everything except node_modules, .git, and runtime artifacts
-      rsync -a --exclude='node_modules' --exclude='.git' --exclude='logs' \
-            --exclude='.claude/data' --exclude='.codemill' --exclude='.DS_Store' \
-            --exclude='_archive_py' --exclude='utils' --exclude='.env' \
-            "$src/" "$HOOKS_DIR/"
+      if command -v rsync &>/dev/null; then
+        rsync -a --exclude='node_modules' --exclude='.git' --exclude='logs' \
+              --exclude='.claude/data' --exclude='.codemill' --exclude='.DS_Store' \
+              --exclude='_archive_py' --exclude='utils' --exclude='.env' \
+              "$src/" "$HOOKS_DIR/"
+      else
+        # Fallback for Windows (Git Bash) where rsync may not be installed
+        warn "rsync not found — using cp fallback (some excluded dirs may be copied)"
+        cp -R "$src/." "$HOOKS_DIR/"
+        # Remove directories that would have been excluded by rsync
+        for exclude_dir in node_modules .git logs .claude/data .codemill _archive_py utils; do
+          rm -rf "$HOOKS_DIR/$exclude_dir" 2>/dev/null || true
+        done
+        rm -f "$HOOKS_DIR/.env" "$HOOKS_DIR/.DS_Store" 2>/dev/null || true
+      fi
       ;;
 
     clone|*)
@@ -372,6 +426,9 @@ configure_port() {
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 main() {
+  # Detect OS for path handling and tool availability
+  detect_os
+
   # Parse --port flag before processing positional args
   parse_flags "$@"
   set -- "${REMAINING_ARGS[@]}"
@@ -381,6 +438,10 @@ main() {
   echo -e "${CYAN}║   claude-code-hooks installer v1.1   ║${NC}"
   echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
   echo ""
+
+  if [ "$PLATFORM" = "windows" ]; then
+    info "Detected Windows environment ($(uname -s))"
+  fi
 
   # First arg is always the target project directory
   resolve_target "${1:-}"
