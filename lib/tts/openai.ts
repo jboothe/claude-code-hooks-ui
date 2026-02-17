@@ -8,6 +8,7 @@ import { join } from 'path';
 import { unlinkSync } from 'fs';
 import type { TTSProvider } from './types';
 import { loadConfig } from '../config';
+import { playAudioFile } from './playback';
 
 export class OpenAITTSProvider implements TTSProvider {
   name = 'openai';
@@ -39,14 +40,12 @@ export class OpenAITTSProvider implements TTSProvider {
       throw new Error(`OpenAI TTS API error: ${response.status}`);
     }
 
-    // Write MP3 to temp file and play with afplay
     const tmpPath = join(tmpdir(), `hooks-tts-oai-${Date.now()}.mp3`);
     const arrayBuffer = await response.arrayBuffer();
     await Bun.write(tmpPath, arrayBuffer);
 
     try {
-      const proc = Bun.spawn(['afplay', tmpPath], { stdout: 'inherit', stderr: 'inherit' });
-      await proc.exited;
+      await playAudioFile(tmpPath);
     } finally {
       try { unlinkSync(tmpPath); } catch { /* cleanup */ }
     }

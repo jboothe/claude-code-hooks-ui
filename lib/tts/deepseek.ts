@@ -7,6 +7,7 @@ import { join } from 'path';
 import { unlinkSync } from 'fs';
 import type { TTSProvider } from './types';
 import { loadConfig } from '../config';
+import { playAudioFile } from './playback';
 
 export class DeepSeekTTSProvider implements TTSProvider {
   name = 'deepseek';
@@ -46,8 +47,7 @@ export class DeepSeekTTSProvider implements TTSProvider {
     await Bun.write(tmpPath, arrayBuffer);
 
     try {
-      const proc = Bun.spawn(['afplay', tmpPath], { stdout: 'inherit', stderr: 'inherit' });
-      await proc.exited;
+      await playAudioFile(tmpPath);
     } finally {
       try { unlinkSync(tmpPath); } catch { /* cleanup */ }
     }

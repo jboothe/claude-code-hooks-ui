@@ -1,6 +1,6 @@
 /**
  * ElevenLabs TTS provider.
- * Falls back to native `say` on quota exceeded.
+ * Falls back to native TTS on quota exceeded.
  */
 
 import { tmpdir } from 'os';
@@ -9,6 +9,7 @@ import { unlinkSync } from 'fs';
 import type { TTSProvider } from './types';
 import { loadConfig } from '../config';
 import { NativeTTSProvider } from './native';
+import { playAudioFile } from './playback';
 
 export class ElevenLabsTTSProvider implements TTSProvider {
   name = 'elevenlabs';
@@ -54,14 +55,12 @@ export class ElevenLabsTTSProvider implements TTSProvider {
         throw new Error(`ElevenLabs API error: ${response.status} ${errorText}`);
       }
 
-      // Write MP3 to temp file and play with afplay
       const tmpPath = join(tmpdir(), `hooks-tts-${Date.now()}.mp3`);
       const arrayBuffer = await response.arrayBuffer();
       await Bun.write(tmpPath, arrayBuffer);
 
       try {
-        const proc = Bun.spawn(['afplay', tmpPath], { stdout: 'inherit', stderr: 'inherit' });
-        await proc.exited;
+        await playAudioFile(tmpPath);
       } finally {
         try { unlinkSync(tmpPath); } catch { /* cleanup best effort */ }
       }

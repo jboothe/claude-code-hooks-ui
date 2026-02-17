@@ -1,32 +1,28 @@
 /**
- * Native macOS TTS provider using the `say` command.
- * Default provider — no API key required.
+ * Native TTS provider using the platform's built-in speech engine.
+ * - macOS: `say` command
+ * - Windows: PowerShell System.Speech.Synthesis
+ * - Linux: espeak
+ * No API key required.
  */
 
 import type { TTSProvider } from './types';
 import { loadConfig } from '../config';
+import { speakNative } from './playback';
 
 export class NativeTTSProvider implements TTSProvider {
   name = 'native';
 
   isAvailable(): boolean {
-    // Available on macOS only
-    return process.platform === 'darwin';
+    // Available on macOS, Windows, and Linux (if espeak is present)
+    return process.platform === 'darwin' || process.platform === 'win32' || process.platform === 'linux';
   }
 
   async speak(text: string): Promise<void> {
     const config = loadConfig();
     const voice = config.tts.native.voice;
-    const rate = String(config.tts.native.rate);
+    const rate = config.tts.native.rate;
 
-    const proc = Bun.spawn(['say', '-v', voice, '-r', rate, text], {
-      stdout: 'inherit',
-      stderr: 'inherit',
-    });
-
-    const exitCode = await proc.exited;
-    if (exitCode !== 0) {
-      throw new Error(`say command exited with code ${exitCode}`);
-    }
+    await speakNative(text, voice, rate);
   }
 }
