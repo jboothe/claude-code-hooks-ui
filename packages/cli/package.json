@@ -1,0 +1,37 @@
+{
+  "name": "claude-code-hooks-ui",
+  "version": "1.0.0",
+  "description": "CLI installer for claude-code-hooks — TTS, guardrails, and activity hooks for Claude Code",
+  "type": "module",
+  "bin": {
+    "claude-code-hooks-ui": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "hooks",
+    "tts",
+    "text-to-speech",
+    "cli"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jboothe/claude-code-hooks-ui.git",
+    "directory": "packages/cli"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  }
+}

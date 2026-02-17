@@ -8,6 +8,7 @@ import { join } from 'path';
 
 /** Full hooks config shape */
 export interface HooksConfig {
+  schemaVersion: number;
   project: {
     name: string | null;
   };
@@ -60,6 +61,7 @@ export interface HooksConfig {
 
 /** Default config values */
 export const DEFAULTS: HooksConfig = {
+  schemaVersion: 1,
   project: { name: null },
   tts: {
     enabled: true,

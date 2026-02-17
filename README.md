@@ -23,7 +23,50 @@ A comprehensive hooks system for [Claude Code](https://docs.anthropic.com/en/doc
 
 ## Installation
 
-### Quick start (git clone)
+### Recommended: npx CLI
+
+The easiest way to install. Walks you through setup interactively — target directory, port, API keys.
+
+```bash
+npx claude-code-hooks-ui init
+```
+
+Non-interactive with options:
+
+```bash
+npx claude-code-hooks-ui init /path/to/project --port 4000 --no-prompts
+```
+
+#### CLI commands
+
+| Command | Description |
+|---------|-------------|
+| `npx claude-code-hooks-ui init [dir]` | Install hooks into a project (interactive) |
+| `npx claude-code-hooks-ui update [dir]` | Pull latest hooks, merge config (user values preserved) |
+| `npx claude-code-hooks-ui status [dir]` | Show install status, config summary, runtime info |
+
+**Init options:**
+- `--port <N>` — Set the Hooks Manager server port (default: 3455)
+- `--no-prompts` — Skip interactive prompts, use all defaults
+
+**What `init` does:**
+1. Checks prerequisites (bun, git)
+2. Prompts for target directory, port, and optional API keys
+3. Clones the hooks repo into `.claude/hooks/` (or merges into an existing directory)
+4. Sets custom port in `hooks.config.json` if specified
+5. Runs schema migrations
+6. Installs bun dependencies
+7. Merges hook registrations into `settings.local.json`
+8. Writes API keys to `.env` if provided
+
+**What `update` does:**
+1. Saves your current `hooks.config.json`
+2. Runs `git pull --ff-only`
+3. Deep-merges new defaults with your saved config (your values always win)
+4. Runs any pending schema migrations
+5. Re-installs dependencies and re-merges settings
+
+### Alternative: git clone + install.sh
 
 ```bash
 cd your-project
@@ -42,6 +85,10 @@ cd .claude/hooks && ./install.sh
 By default the Hooks Manager runs on port 3455. To use a different port, pass `--port` during install:
 
 ```bash
+# Via CLI
+npx claude-code-hooks-ui init --port 4000
+
+# Via install.sh
 ./install.sh /path/to/project local:/path/to/hooks --port 4000
 ```
 
@@ -50,6 +97,10 @@ This writes the port into `hooks.config.json` so the server starts on the right 
 ### Update existing installation
 
 ```bash
+# Via CLI (recommended — preserves your config automatically)
+npx claude-code-hooks-ui update
+
+# Via install.sh
 ./install.sh update
 ```
 
@@ -147,7 +198,12 @@ Add to your project's `.env` file or export in your shell:
 │   └── public/            # Browser UI (vanilla HTML/JS/CSS)
 ├── settings.template.json # Hook registrations for settings.local.json
 ├── install.sh             # One-command installer
-└── package.json           # Dependencies: @anthropic-ai/sdk, openai, dotenv
+├── package.json           # Dependencies: @anthropic-ai/sdk, openai, dotenv
+└── packages/cli/          # npx CLI installer (zero runtime deps, Node 18+)
+    ├── src/index.ts       # Entry point + command router
+    ├── src/commands/      # init, update, status commands
+    ├── src/lib/           # Logger, platform, prompts, installer, config, migrations
+    └── src/migrations/    # Schema migration system for hooks.config.json
 ```
 
 ## How hooks work
