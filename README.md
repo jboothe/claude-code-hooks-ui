@@ -37,6 +37,16 @@ cd .claude/hooks && ./install.sh
 ./install.sh local:/path/to/claude-code-hooks
 ```
 
+### Custom server port
+
+By default the Hooks Manager runs on port 3455. To use a different port, pass `--port` during install:
+
+```bash
+./install.sh /path/to/project local:/path/to/hooks --port 4000
+```
+
+This writes the port into `hooks.config.json` so the server starts on the right port from the first run. You can also change it later in the Settings UI or by setting the `PORT` environment variable.
+
 ### Update existing installation
 
 ```bash
@@ -82,7 +92,8 @@ All hook behavior is configurable via `hooks.config.json` in the hooks directory
     "enabled": true,
     "sleep": { "enabled": true, "maxSeconds": 120 },
     "subagentRepeat": { "enabled": true, "maxLaunches": 3 }
-  }
+  },
+  "server": { "port": 3455 }
 }
 ```
 
@@ -173,8 +184,13 @@ A browser-based app for testing TTS providers and managing the queue:
 ```bash
 cd .claude/hooks
 bun run tts-app
-# Open http://localhost:3455
+# Open http://localhost:3455 (or your configured port)
 ```
+
+The port can be configured three ways (highest priority first):
+1. `PORT` environment variable: `PORT=4000 bun run tts-app`
+2. `server.port` in `hooks.config.json`
+3. Default: `3455`
 
 ## Inspirational thanks to:
  [IndyDevDan](https://www.youtube.com/@indydevdan) 
