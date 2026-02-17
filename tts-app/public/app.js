@@ -364,9 +364,13 @@ function renderProviders() {
         let any = false;
         for (const k of keys) {
           const input = document.getElementById(`ps-${prefix}-${k}`);
-          if (!input) continue;
-          const v = input.type === 'number' ? parseFloat(input.value) : input.value;
-          if (input.value !== '' && !isNaN(v)) { obj[k] = v; any = true; }
+          if (!input || input.value === '') continue;
+          if (input.type === 'number') {
+            const num = parseFloat(input.value);
+            if (!isNaN(num)) { obj[k] = num; any = true; }
+          } else {
+            obj[k] = input.value; any = true;
+          }
         }
         if (any) updates.tts[prefix] = obj;
       };
