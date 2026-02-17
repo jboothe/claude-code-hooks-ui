@@ -18,3 +18,9 @@ dist/
 
 # Secrets
 .env
+
+# Private local overlay (never committed)
+settings.local.template.json
+
+# Private publishing instructions
+NPM-PUBLISH.md

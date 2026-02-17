@@ -273,6 +273,33 @@ merge_settings() {
     info "Creating $SETTINGS_FILE from template..."
     cp "$TEMPLATE_FILE" "$SETTINGS_FILE"
     ok "Settings created"
+
+    # Also apply local overlay if it exists (for fresh installs with private hooks)
+    local LOCAL_TEMPLATE="$HOOKS_DIR/settings.local.template.json"
+    if [ -f "$LOCAL_TEMPLATE" ] && command -v jq &>/dev/null; then
+      info "Merging local overlay from settings.local.template.json..."
+      local overlay_hooks
+      overlay_hooks=$(jq '.hooks' "$LOCAL_TEMPLATE")
+
+      local merged
+      merged=$(jq --argjson overlay "$overlay_hooks" '
+        reduce ($overlay | keys[]) as $event (
+          .;
+          if .hooks[$event] then
+            .hooks[$event][0].hooks = (
+              [.hooks[$event][0].hooks[], $overlay[$event][0].hooks[]]
+              | unique_by(.command)
+            )
+          else
+            .hooks[$event] = $overlay[$event]
+          end
+        )
+      ' "$SETTINGS_FILE")
+
+      echo "$merged" | jq '.' > "$SETTINGS_FILE.tmp"
+      mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+      ok "Local overlay merged (send_event hooks added)"
+    fi
     return
   fi
 
@@ -293,6 +320,34 @@ merge_settings() {
     echo "$merged" | jq '.' > "$SETTINGS_FILE.tmp"
     mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
     ok "Hook registrations merged (existing settings preserved)"
+
+    # ── Local overlay merge (private hooks like send_event.ts) ──
+    local LOCAL_TEMPLATE="$HOOKS_DIR/settings.local.template.json"
+    if [ -f "$LOCAL_TEMPLATE" ]; then
+      info "Merging local overlay from settings.local.template.json..."
+
+      local overlay_hooks
+      overlay_hooks=$(jq '.hooks' "$LOCAL_TEMPLATE")
+
+      # Append overlay hooks into each event's hooks array, deduplicating by command
+      merged=$(jq --argjson overlay "$overlay_hooks" '
+        reduce ($overlay | keys[]) as $event (
+          .;
+          if .hooks[$event] then
+            .hooks[$event][0].hooks = (
+              [.hooks[$event][0].hooks[], $overlay[$event][0].hooks[]]
+              | unique_by(.command)
+            )
+          else
+            .hooks[$event] = $overlay[$event]
+          end
+        )
+      ' "$SETTINGS_FILE")
+
+      echo "$merged" | jq '.' > "$SETTINGS_FILE.tmp"
+      mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+      ok "Local overlay merged (send_event hooks added)"
+    fi
   else
     warn "jq not available — cannot smart-merge settings."
     warn "Template saved to $TEMPLATE_FILE"
