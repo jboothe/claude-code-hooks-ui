@@ -123,10 +123,10 @@ async function announceCompletion(transcriptPath?: string, sessionId?: string): 
 
 function generateTemplatedMessage(activities: string[]): string {
   const templates = loadTemplates();
-  const { nameIncludeProbability } = loadConfig().tts;
-  const includeName = Math.random() < nameIncludeProbability;
+  const ttsConfig = loadConfig().tts;
+  const includeName = Math.random() < ttsConfig.nameIncludeProbability;
   const projectName = getProjectName();
-  const userName = (process.env.USER_NAME ?? '').trim() || 'there';
+  const userName = ttsConfig.userName || 'there';
 
   if (!activities.length) {
     const templateArray = includeName

@@ -33,7 +33,7 @@ export class AnthropicLLM implements LLMProvider {
   }
 
   async generateCompletionMessage(): Promise<string | null> {
-    const userName = (process.env.USER_NAME ?? '').trim();
+    const userName = loadConfig().tts.userName || '';
 
     let nameInstruction = '';
     let examples: string;

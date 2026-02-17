@@ -70,6 +70,7 @@ All hook behavior is configurable via `hooks.config.json` in the hooks directory
 {
   "tts": {
     "enabled": true,
+    "userName": "Sarah",
     "providerPriority": ["native", "elevenlabs", "openai", "unreal-speech"],
     "hookToggles": {
       "stop": true,
@@ -103,7 +104,6 @@ Add to your project's `.env` file or export in your shell:
 
 | Key | Features | Get it at |
 |-----|----------|-----------|
-| `USER_NAME` | TTS personalization | Your name for personalized TTS messages (e.g. "Done, Sarah!") |
 | `OPENAI_API_KEY` | LLM summarization + TTS | [platform.openai.com](https://platform.openai.com) |
 | `ANTHROPIC_API_KEY` | LLM summarization | [console.anthropic.com](https://console.anthropic.com) |
 | `ELEVENLABS_API_KEY` | TTS | [elevenlabs.io](https://elevenlabs.io) |

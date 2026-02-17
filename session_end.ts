@@ -49,7 +49,7 @@ async function main(): Promise<void> {
         const template = templates.sessionEnd[reasonKey] ?? templates.sessionEnd.other;
         const message = renderTemplate(template, {
           projectName: getProjectName(),
-          userName: (process.env.USER_NAME ?? '').trim(),
+          userName: loadConfig().tts.userName || '',
         });
         const ttsStart = Date.now();
         let ttsSuccess = true;

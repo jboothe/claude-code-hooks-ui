@@ -106,8 +106,9 @@ async function announceSubagentCompletion(transcriptPath?: string, sessionId?: s
     // Generate message using templates
     const templates = loadTemplates();
     const friendlyName = AGENT_NAMES[subagentType ?? ''] ?? subagentType ?? 'Agent';
-    const includeName = Math.random() < loadConfig().tts.nameIncludeProbability;
-    const userName = (process.env.USER_NAME ?? '').trim() || 'there';
+    const ttsConfig = loadConfig().tts;
+    const includeName = Math.random() < ttsConfig.nameIncludeProbability;
+    const userName = ttsConfig.userName || 'there';
     const projectName = getProjectName();
 
     let ttsMessage: string;

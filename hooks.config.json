@@ -8,7 +8,8 @@
       "native"
     ],
     "enabled": true,
-    "nameIncludeProbability": 0.25,
+    "userName": "Jeff",
+    "nameIncludeProbability": 1,
     "hookToggles": {
       "stop": true,
       "subagentStop": true,
@@ -32,10 +33,10 @@
       "model": "gpt-4o-mini-tts"
     },
     "unrealSpeech": {
-      "voice": "Chloe",
+      "voice": "Hannah",
       "temperature": 0.25
     },
-    "templateTone": "playful"
+    "templateTone": "concise"
   },
   "templates": {
     "notification": {
@@ -70,5 +71,8 @@
       "enabled": true,
       "maxLaunches": 3
     }
+  },
+  "server": {
+    "port": 3455
   }
 }

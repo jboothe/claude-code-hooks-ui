@@ -54,7 +54,7 @@ async function announceNotification(sessionId: string): Promise<void> {
       return;
     }
 
-    const userName = (process.env.USER_NAME ?? '').trim();
+    const userName = config.tts.userName || '';
     const includeName = userName && Math.random() < config.tts.nameIncludeProbability;
 
     const templates = loadTemplates();

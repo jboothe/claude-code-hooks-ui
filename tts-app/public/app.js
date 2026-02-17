@@ -749,6 +749,9 @@ function renderSettings() {
   setValue('server-port', c.server?.port ?? 3455);
   document.getElementById('server-port-notice').style.display = 'none';
 
+  // Your name
+  setValue('tts-userName', c.tts?.userName ?? '');
+
   // Name include probability
   const nameProbSlider = document.getElementById('nameIncludeProbability');
   nameProbSlider.value = c.tts?.nameIncludeProbability ?? 0.3;
@@ -800,6 +803,7 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
     server: { port: newPort },
     tts: {
       enabled: isChecked('tts-enabled'),
+      userName: getValue('tts-userName'),
       nameIncludeProbability: parseFloat(document.getElementById('nameIncludeProbability').value),
       hookToggles: {
         stop: isChecked('toggle-stop'),

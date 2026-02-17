@@ -19,6 +19,7 @@ export interface HooksConfig {
       notification: boolean;
       sessionEnd: boolean;
     };
+    userName: string;
     nameIncludeProbability: number;
     providerPriority: string[];
     native: { voice: string; rate: number };
@@ -68,6 +69,7 @@ export const DEFAULTS: HooksConfig = {
       notification: true,
       sessionEnd: true,
     },
+    userName: '',
     nameIncludeProbability: 0.3,
     providerPriority: ['native', 'elevenlabs', 'openai', 'unreal-speech', 'deepseek'],
     native: { voice: 'Samantha', rate: 180 },
