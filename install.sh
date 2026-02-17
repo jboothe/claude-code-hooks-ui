@@ -191,12 +191,59 @@ install_hooks() {
 
     clone|*)
       if [ -d "$HOOKS_DIR" ]; then
-        err "$HOOKS_DIR already exists. Use 'update' to pull latest, or remove it first."
-        exit 1
+        # Check if it's already a hooks-manager git clone
+        if [ -d "$HOOKS_DIR/.git" ]; then
+          local remote_url
+          remote_url=$(git -C "$HOOKS_DIR" config --get remote.origin.url 2>/dev/null || echo "")
+          if [[ "$remote_url" == *"claude-code-hooks"* ]]; then
+            warn "$HOOKS_DIR is already a hooks-manager clone."
+            warn "Use 'update' to pull latest changes instead."
+            exit 1
+          fi
+        fi
+
+        # Existing hooks dir that isn't ours — merge into it
+        warn "$HOOKS_DIR already exists — merging hooks into existing directory..."
+        info "Existing files will NOT be overwritten."
+
+        local tmp_dir
+        tmp_dir=$(mktemp -d)
+        trap "rm -rf '$tmp_dir'" EXIT
+
+        info "Cloning hooks repo to temp directory..."
+        git clone --depth 1 "$HOOKS_REPO" "$tmp_dir/hooks" 2>&1 | sed 's/^/  /'
+
+        info "Merging into existing hooks directory..."
+        if command -v rsync &>/dev/null; then
+          # --ignore-existing preserves any files the user already has
+          rsync -a --ignore-existing \
+                --exclude='node_modules' --exclude='.git' --exclude='logs' \
+                --exclude='.claude/data' --exclude='.codemill' --exclude='.DS_Store' \
+                --exclude='_archive_py' --exclude='utils' --exclude='.env' \
+                "$tmp_dir/hooks/" "$HOOKS_DIR/"
+        else
+          warn "rsync not found — using cp fallback (existing files will be preserved)"
+          # cp -n = no-clobber (don't overwrite existing files)
+          if [ "$PLATFORM" = "macos" ]; then
+            cp -Rn "$tmp_dir/hooks/." "$HOOKS_DIR/" 2>/dev/null || true
+          else
+            cp -Rn "$tmp_dir/hooks/." "$HOOKS_DIR/" 2>/dev/null || true
+          fi
+          # Remove directories that would have been excluded by rsync
+          for exclude_dir in node_modules .git logs .claude/data .codemill _archive_py utils; do
+            rm -rf "$HOOKS_DIR/$exclude_dir" 2>/dev/null || true
+          done
+          rm -f "$HOOKS_DIR/.env" "$HOOKS_DIR/.DS_Store" 2>/dev/null || true
+        fi
+
+        rm -rf "$tmp_dir"
+        trap - EXIT
+        ok "Hooks merged into existing directory (existing files preserved)"
+      else
+        info "Cloning hooks repo..."
+        mkdir -p "$PROJECT_ROOT/.claude"
+        git clone "$HOOKS_REPO" "$HOOKS_DIR"
       fi
-      info "Cloning hooks repo..."
-      mkdir -p "$PROJECT_ROOT/.claude"
-      git clone "$HOOKS_REPO" "$HOOKS_DIR"
       ;;
   esac
 

@@ -354,6 +354,38 @@ function renderProviders() {
     });
   });
 
+  // Auto-save provider settings (voice, model, temperature, etc.) on change
+  list.querySelectorAll('.provider-settings-inline select, .provider-settings-inline input').forEach(el => {
+    el.addEventListener('change', async () => {
+      const updates = { tts: {} };
+      // Collect all current provider setting values
+      const collect = (prefix, keys) => {
+        const obj = {};
+        let any = false;
+        for (const k of keys) {
+          const input = document.getElementById(`ps-${prefix}-${k}`);
+          if (!input) continue;
+          const v = input.type === 'number' ? parseFloat(input.value) : input.value;
+          if (input.value !== '' && !isNaN(v)) { obj[k] = v; any = true; }
+        }
+        if (any) updates.tts[prefix] = obj;
+      };
+      collect('native', ['voice', 'rate']);
+      collect('elevenlabs', ['voiceId', 'modelId']);
+      collect('openai', ['voice', 'model']);
+      collect('unrealSpeech', ['voice', 'temperature']);
+      collect('deepseek', ['endpoint']);
+
+      const result = await api.put('/api/config', updates);
+      if (result.ok) {
+        config = result.config;
+        setStatus('Provider settings saved', 'ok');
+      } else {
+        setStatus(`Save failed: ${result.error}`, 'error');
+      }
+    });
+  });
+
   // Drag and drop (only draggable TTS provider items)
   setupDragAndDrop(list);
 }

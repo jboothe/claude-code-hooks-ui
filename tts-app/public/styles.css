@@ -74,6 +74,7 @@ header h1 {
 .tabs {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 2px;
   padding: 0 1rem;
   border-bottom: 2px solid var(--border);
@@ -686,11 +687,11 @@ input[type="range"] {
 }
 
 .status {
-  margin-left: auto;
+  position: absolute;
+  right: 1rem;
   font-size: 0.8rem;
   color: var(--text-muted);
   white-space: nowrap;
-  padding-right: 0.5rem;
 }
 
 .status.ok {
